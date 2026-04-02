@@ -1,0 +1,195 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --bg-primary: rgba(255, 255, 255, 0.85);
+    --bg-secondary: rgba(246, 246, 246, 0.9);
+    --bg-hover: rgba(0, 0, 0, 0.04);
+    --bg-active: rgba(0, 122, 255, 0.1);
+    --text-primary: #1d1d1f;
+    --text-secondary: #86868b;
+    --text-tertiary: #aeaeb2;
+    --border-color: rgba(0, 0, 0, 0.08);
+    --accent-color: #007AFF;
+    --accent-hover: #0066DD;
+    --danger-color: #FF3B30;
+    --success-color: #34C759;
+    --shadow: 0 24px 80px rgba(0, 0, 0, 0.12), 0 0 1px rgba(0, 0, 0, 0.1);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg-primary: rgba(30, 30, 30, 0.85);
+      --bg-secondary: rgba(44, 44, 46, 0.9);
+      --bg-hover: rgba(255, 255, 255, 0.06);
+      --bg-active: rgba(0, 122, 255, 0.2);
+      --text-primary: #f5f5f7;
+      --text-secondary: #98989d;
+      --text-tertiary: #636366;
+      --border-color: rgba(255, 255, 255, 0.08);
+      --shadow: 0 24px 80px rgba(0, 0, 0, 0.4), 0 0 1px rgba(0, 0, 0, 0.3);
+    }
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', 'Helvetica Neue', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: transparent;
+  color: var(--text-primary);
+}
+
+#root {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* 自定义滚动条 */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.25);
+}
+
+@media (prefers-color-scheme: dark) {
+  ::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.15);
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.25);
+  }
+}
+
+/* 拖拽区域 */
+.drag-region {
+  -webkit-app-region: drag;
+}
+
+.no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* 高亮搜索匹配文本 */
+.search-highlight {
+  background-color: rgba(255, 214, 0, 0.35);
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .search-highlight {
+    background-color: rgba(255, 214, 0, 0.25);
+  }
+}
+
+/* ===== Clip 悬停 Tooltip ===== */
+.clip-tooltip {
+  position: fixed;
+  z-index: 100;
+  width: 320px;
+  max-height: 340px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15), 0 0 1px rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  overflow: hidden;
+  pointer-events: auto;
+}
+
+/* 显示在条目上方 */
+.clip-tooltip-above {
+  transform: translateY(-100%);
+  animation: tooltip-in-above 0.15s ease-out;
+}
+
+/* 显示在条目下方 */
+.clip-tooltip-below {
+  transform: translateY(0);
+  animation: tooltip-in-below 0.15s ease-out;
+}
+
+@keyframes tooltip-in-above {
+  from {
+    opacity: 0;
+    transform: translateY(calc(-100% + 6px));
+  }
+  to {
+    opacity: 1;
+    transform: translateY(-100%);
+  }
+}
+
+@keyframes tooltip-in-below {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.clip-tooltip-content {
+  padding: 10px 12px;
+  max-height: 200px;
+  overflow-y: auto;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-all;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.clip-tooltip-stats {
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.clip-tooltip-stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+}
+
+.clip-tooltip-label {
+  color: var(--text-tertiary);
+}
+
+.clip-tooltip-value {
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-color-scheme: dark) {
+  .clip-tooltip {
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4), 0 0 1px rgba(0, 0, 0, 0.3);
+  }
+}

@@ -1,0 +1,21 @@
+appId: com.snappaste.clipboard
+productName: SnapPaste
+directories:
+  buildResources: resources
+  output: release
+files:
+  - dist
+  - dist-electron
+mac:
+  target:
+    - dmg
+    - zip
+  icon: resources/icon.png
+  category: public.app-category.utilities
+  darkModeSupport: true
+dmg:
+  artifactName: SnapPaste-${version}.${ext}
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true

@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3B82F6"/>
+      <stop offset="100%" style="stop-color:#1D4ED8"/>
+    </linearGradient>
+  </defs>
+  <!-- 背景圆角矩形 -->
+  <rect x="20" y="20" width="472" height="472" rx="80" ry="80" fill="url(#bg)"/>
+  <!-- 剪贴板主体 -->
+  <rect x="140" y="170" width="232" height="260" rx="18" ry="18" fill="white" opacity="0.95"/>
+  <!-- 剪贴板夹子 -->
+  <rect x="200" y="130" width="112" height="60" rx="14" ry="14" fill="white" opacity="0.95"/>
+  <rect x="220" y="115" width="72" height="42" rx="10" ry="10" fill="#1E5AC8"/>
+  <!-- 文本行 -->
+  <rect x="175" y="250" width="162" height="14" rx="7" fill="#3B82F6" opacity="0.7"/>
+  <rect x="175" y="285" width="130" height="14" rx="7" fill="#3B82F6" opacity="0.5"/>
+  <rect x="175" y="320" width="148" height="14" rx="7" fill="#3B82F6" opacity="0.7"/>
+  <rect x="175" y="355" width="100" height="14" rx="7" fill="#3B82F6" opacity="0.5"/>
+  <!-- 闪电 (Snap) -->
+  <polygon points="340,240 370,290 348,290 380,350 335,295 358,295 330,240" fill="#FBBF24" stroke="#F59E0B" stroke-width="2"/>
+</svg>
