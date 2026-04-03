@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback, useRef } from 'react'
+import React, { useEffect, useCallback, useRef, useState } from 'react'
 import { Virtuoso, VirtuosoHandle } from 'react-virtuoso'
 import { useClipboardStore } from '../stores/clipboard-store'
 import ClipboardItem from './ClipboardItem'
@@ -13,6 +13,7 @@ export default function ClipboardList() {
   const setSelectedIndex = useClipboardStore((s) => s.setSelectedIndex)
   const copyToClipboard = useClipboardStore((s) => s.copyToClipboard)
   const virtuosoRef = useRef<VirtuosoHandle>(null)
+  const [showBackToTop, setShowBackToTop] = useState(false)
 
   useEffect(() => {
     fetchClips(true)
@@ -26,11 +27,12 @@ export default function ClipboardList() {
     return unsubscribe
   }, [fetchClips])
 
-  // 每次窗口显示时滚动到顶部
+  // 每次窗口显示时重置状态并滚动到顶部
   useEffect(() => {
     const unsubscribe = window.clipboardAPI.onWindowShown(() => {
       virtuosoRef.current?.scrollToIndex({ index: 0, align: 'start' })
       setSelectedIndex(-1)
+      setShowBackToTop(false)
     })
     return unsubscribe
   }, [setSelectedIndex])
@@ -56,6 +58,12 @@ export default function ClipboardList() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [handleKeyDown])
 
+  // 回到顶部
+  const scrollToTop = useCallback(() => {
+    virtuosoRef.current?.scrollToIndex({ index: 0, align: 'start', behavior: 'smooth' })
+    setShowBackToTop(false)
+  }, [])
+
   if (clips.length === 0 && !isLoading) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center text-[var(--text-tertiary)] py-16">
@@ -71,7 +79,7 @@ export default function ClipboardList() {
   }
 
   return (
-    <div className="flex-1 overflow-hidden">
+    <div className="flex-1 overflow-hidden relative">
       <Virtuoso
         ref={virtuosoRef}
         data={clips}
@@ -79,6 +87,9 @@ export default function ClipboardList() {
           if (clips.length < totalCount) {
             fetchClips(false)
           }
+        }}
+        atTopStateChange={(atTop) => {
+          setShowBackToTop(!atTop)
         }}
         overscan={100}
         itemContent={(index, clip) => (
@@ -98,6 +109,29 @@ export default function ClipboardList() {
             ) : null
         }}
       />
+
+      {/* 回到顶部按钮 */}
+      {showBackToTop && (
+        <button
+          onClick={scrollToTop}
+          className="absolute bottom-3 right-3 w-8 h-8 rounded-full
+            bg-[var(--accent-color)] text-white shadow-lg
+            flex items-center justify-center
+            hover:bg-[var(--accent-hover)] active:scale-95
+            transition-all duration-200 animate-fade-in z-10"
+          title="回到顶部"
+        >
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path
+              d="M7 11V3M7 3L3 7M7 3l4 4"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </button>
+      )}
     </div>
   )
 }

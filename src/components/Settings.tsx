@@ -52,9 +52,17 @@ export default function Settings() {
   const [showClearConfirm, setShowClearConfirm] = useState(false)
   const [isRecordingShortcut, setIsRecordingShortcut] = useState(false)
   const [hasChanges, setHasChanges] = useState(false)
+  const [storagePaths, setStoragePaths] = useState<{
+    dataDir: string
+    dbFile: string
+    settingsFile: string
+    imagesDir: string
+  } | null>(null)
 
   useEffect(() => {
     loadSettings()
+    // 加载存储路径信息
+    window.storageAPI.getStoragePaths().then(setStoragePaths)
   }, [loadSettings])
 
   useEffect(() => {
@@ -281,6 +289,71 @@ export default function Settings() {
           </span>
         )}
       </div>
+
+      {/* 数据存储位置 */}
+      {storagePaths && (
+        <div className="mt-6 mb-6">
+          <h3 className="text-sm font-medium text-[var(--text-primary)] mb-3">📂 数据存储位置</h3>
+          <p className="text-xs text-[var(--text-tertiary)] mb-3">
+            以下文件由 SnapPaste 管理，存储在系统应用数据目录中，不会被清除缓存操作删除。
+            <br />
+            请勿手动删除这些文件，否则历史记录将丢失。
+          </p>
+          <div className="space-y-2.5">
+            <div className="flex items-center justify-between gap-2 group">
+              <div className="min-w-0 flex-1">
+                <p className="text-xs text-[var(--text-secondary)]">剪切板数据库</p>
+                <p className="text-[11px] text-[var(--text-tertiary)] truncate font-mono"
+                  title={storagePaths.dbFile}>
+                  {storagePaths.dbFile}
+                </p>
+              </div>
+              <button
+                onClick={() => window.storageAPI.showInFolder(storagePaths.dbFile)}
+                className="flex-shrink-0 px-2.5 py-1 text-[11px] rounded-md
+                  text-[var(--accent-color)] bg-[var(--bg-secondary)]
+                  hover:bg-[var(--bg-hover)] transition-colors"
+              >
+                在 Finder 中显示
+              </button>
+            </div>
+            <div className="flex items-center justify-between gap-2 group">
+              <div className="min-w-0 flex-1">
+                <p className="text-xs text-[var(--text-secondary)]">图片存储目录</p>
+                <p className="text-[11px] text-[var(--text-tertiary)] truncate font-mono"
+                  title={storagePaths.imagesDir}>
+                  {storagePaths.imagesDir}
+                </p>
+              </div>
+              <button
+                onClick={() => window.storageAPI.showInFolder(storagePaths.imagesDir)}
+                className="flex-shrink-0 px-2.5 py-1 text-[11px] rounded-md
+                  text-[var(--accent-color)] bg-[var(--bg-secondary)]
+                  hover:bg-[var(--bg-hover)] transition-colors"
+              >
+                在 Finder 中显示
+              </button>
+            </div>
+            <div className="flex items-center justify-between gap-2 group">
+              <div className="min-w-0 flex-1">
+                <p className="text-xs text-[var(--text-secondary)]">设置文件</p>
+                <p className="text-[11px] text-[var(--text-tertiary)] truncate font-mono"
+                  title={storagePaths.settingsFile}>
+                  {storagePaths.settingsFile}
+                </p>
+              </div>
+              <button
+                onClick={() => window.storageAPI.showInFolder(storagePaths.settingsFile)}
+                className="flex-shrink-0 px-2.5 py-1 text-[11px] rounded-md
+                  text-[var(--accent-color)] bg-[var(--bg-secondary)]
+                  hover:bg-[var(--bg-hover)] transition-colors"
+              >
+                在 Finder 中显示
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 关于 */}
       <div className="mt-8 pt-4 border-t border-[var(--border-color)]">

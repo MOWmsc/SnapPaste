@@ -39,5 +39,17 @@ const imageAPI = {
   getImageBase64: (imagePath: string) => ipcRenderer.invoke('get-image-base64', imagePath)
 }
 
+// 存储路径 API
+const storageAPI = {
+  getStoragePaths: () => ipcRenderer.invoke('get-storage-paths') as Promise<{
+    dataDir: string
+    dbFile: string
+    settingsFile: string
+    imagesDir: string
+  }>,
+  showInFolder: (filePath: string) => ipcRenderer.invoke('show-in-folder', filePath) as Promise<boolean>
+}
+
 contextBridge.exposeInMainWorld('clipboardAPI', clipboardAPI)
 contextBridge.exposeInMainWorld('imageAPI', imageAPI)
+contextBridge.exposeInMainWorld('storageAPI', storageAPI)

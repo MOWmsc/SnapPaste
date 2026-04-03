@@ -30,6 +30,7 @@ interface ClipboardStore {
   setSelectedIndex: (index: number) => void
 
   fetchClips: (reset?: boolean) => Promise<void>
+  refreshTotalCount: () => Promise<void>
   deleteClip: (id: number) => Promise<void>
   toggleFavorite: (id: number) => Promise<void>
   copyToClipboard: (id: number) => Promise<void>
@@ -126,6 +127,21 @@ export const useClipboardStore = create<ClipboardStore>((set, get) => ({
     } catch (err) {
       console.error('Failed to fetch clips:', err)
       set({ isLoading: false })
+    }
+  },
+
+  // 独立刷新总记录数（不受分页加载 isLoading 限制）
+  refreshTotalCount: async () => {
+    const { filterType, searchQuery, viewMode } = get()
+    try {
+      const count = await window.clipboardAPI.getClipCount({
+        type: filterType,
+        search: searchQuery || undefined,
+        favoritesOnly: viewMode === 'favorites'
+      })
+      set({ totalCount: count })
+    } catch (err) {
+      console.error('Failed to refresh total count:', err)
     }
   },
 

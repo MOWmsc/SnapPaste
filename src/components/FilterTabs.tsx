@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import { useClipboardStore } from '../stores/clipboard-store'
 import type { ClipType } from '../types'
 
@@ -15,6 +15,20 @@ export default function FilterTabs() {
   const viewMode = useClipboardStore((s) => s.viewMode)
   const setViewMode = useClipboardStore((s) => s.setViewMode)
   const totalCount = useClipboardStore((s) => s.totalCount)
+  const refreshTotalCount = useClipboardStore((s) => s.refreshTotalCount)
+
+  // 挂载时立即刷新总数
+  useEffect(() => {
+    refreshTotalCount()
+  }, [refreshTotalCount])
+
+  // 监听剪切板更新时同步刷新总数
+  useEffect(() => {
+    const unsubscribe = window.clipboardAPI.onClipboardUpdate(() => {
+      refreshTotalCount()
+    })
+    return unsubscribe
+  }, [refreshTotalCount])
 
   return (
     <div className="px-4 pb-2 flex items-center justify-between">

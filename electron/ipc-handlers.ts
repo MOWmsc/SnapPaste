@@ -1,4 +1,4 @@
-import { ipcMain, clipboard, nativeImage, BrowserWindow, app } from 'electron'
+import { ipcMain, clipboard, nativeImage, BrowserWindow, app, shell } from 'electron'
 import {
   getClips,
   getClipCount,
@@ -148,5 +148,29 @@ export function registerIpcHandlers(mainWindow: BrowserWindow) {
       console.error('Failed to read image:', err)
     }
     return null
+  })
+
+  // 获取数据存储路径信息
+  ipcMain.handle('get-storage-paths', () => {
+    const userDataDir = app.getPath('userData')
+    return {
+      dataDir: userDataDir,
+      dbFile: path.join(userDataDir, 'snappaste-clips.json'),
+      settingsFile: path.join(userDataDir, 'snappaste-settings.json'),
+      imagesDir: path.join(userDataDir, 'clipboard-images')
+    }
+  })
+
+  // 在 Finder 中显示文件/文件夹
+  ipcMain.handle('show-in-folder', (_event, filePath: string) => {
+    // 安全检查：只允许打开 userData 目录下的路径
+    const userDataDir = app.getPath('userData')
+    const resolvedPath = path.resolve(filePath)
+    if (!resolvedPath.startsWith(userDataDir)) {
+      console.error('Blocked folder open attempt outside userData:', filePath)
+      return false
+    }
+    shell.showItemInFolder(resolvedPath)
+    return true
   })
 }

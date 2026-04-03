@@ -48,6 +48,16 @@ export interface ImageAPI {
   getImageBase64: (imagePath: string) => Promise<string | null>
 }
 
+export interface StorageAPI {
+  getStoragePaths: () => Promise<{
+    dataDir: string
+    dbFile: string
+    settingsFile: string
+    imagesDir: string
+  }>
+  showInFolder: (filePath: string) => Promise<boolean>
+}
+
 export interface AppSettings {
   /** 最大记录数，-1 表示不限制 */
   maxRecords: number
@@ -61,5 +71,6 @@ declare global {
   interface Window {
     clipboardAPI: ClipboardAPI
     imageAPI: ImageAPI
+    storageAPI: StorageAPI
   }
 }

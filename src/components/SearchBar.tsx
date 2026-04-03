@@ -29,9 +29,13 @@ export default function SearchBar() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [searchQuery, setSearchQuery])
 
-  // 监听窗口显示事件，重新聚焦搜索框
+  // 监听窗口显示事件，清空搜索内容并重新聚焦搜索框
   useEffect(() => {
     const unsubscribe = window.clipboardAPI.onWindowShown(() => {
+      // 清空搜索框，让用户看到完整的最新列表
+      if (searchQuery) {
+        setSearchQuery('')
+      }
       // 短暂延迟确保窗口已经完全显示
       setTimeout(() => {
         inputRef.current?.focus()
@@ -39,7 +43,7 @@ export default function SearchBar() {
       }, 50)
     })
     return unsubscribe
-  }, [])
+  }, [searchQuery, setSearchQuery])
 
   return (
     <div className="drag-region px-4 pt-3 pb-2">
