@@ -149,6 +149,9 @@ export function initDatabase() {
         if (clip.last_copied_at === undefined) clip.last_copied_at = null
         if (clip.last_pasted_at === undefined) clip.last_pasted_at = clip.created_at
       }
+      // 一次性数据修复：旧版本图片记录的 content_hash 是基于 preview 文本计算的，
+      // 导致同尺寸图片相互错误去重。这里基于实际图片文件重算一次正确的 hash。
+      migrateImageHashes()
     }
   } catch (err) {
     console.error('Failed to load database, starting fresh:', err)
@@ -181,8 +184,91 @@ export function hashContent(content: string): string {
   return crypto.createHash('sha256').update(content).digest('hex')
 }
 
-export function insertClip(content: string, type: ClipType, imagePath?: string): ClipRecord | null {
-  const contentHash = hashContent(content)
+/**
+ * 一次性迁移：旧版本图片记录的 content_hash 是 hash(preview)，
+ * 导致同尺寸图片错误去重。这里基于实际 PNG 文件重算 hash，并去除孤儿记录与重复记录。
+ *
+ * 安全设计：
+ * - 通过添加 image_hash_v2 标记位识别已迁移记录，避免每次启动重复执行
+ * - 找不到 image_path 文件的图片记录会被删除（已经无法显示）
+ * - 重算后若发现真正的重复（同图二份），保留 last_pasted_at 较新的那条
+ */
+function migrateImageHashes() {
+  const flag = (data as any).image_hash_v2_migrated
+  if (flag) return
+
+  let recomputed = 0
+  let removedOrphans = 0
+  let mergedDups = 0
+
+  // Step 1: 重算所有图片记录的 content_hash
+  const seen = new Map<string, ClipRecord>() // 新 hash → 保留的记录
+  const toRemove = new Set<number>()
+
+  for (const clip of data.clips) {
+    if (clip.type !== 'image') continue
+    if (!clip.image_path || !fs.existsSync(clip.image_path)) {
+      // 孤儿图片记录（文件已被清理或丢失），直接删除
+      toRemove.add(clip.id)
+      removedOrphans++
+      continue
+    }
+    try {
+      const buffer = fs.readFileSync(clip.image_path)
+      const newHash = hashContent(buffer.toString('base64'))
+      clip.content_hash = newHash
+      recomputed++
+
+      // 同一新 hash 出现多次 → 真正的重复，保留较新一条
+      const prior = seen.get(newHash)
+      if (prior) {
+        const priorTime = new Date(prior.last_pasted_at || prior.created_at).getTime()
+        const curTime = new Date(clip.last_pasted_at || clip.created_at).getTime()
+        const loser = curTime > priorTime ? prior : clip
+        const winner = curTime > priorTime ? clip : prior
+        toRemove.add(loser.id)
+        seen.set(newHash, winner)
+        mergedDups++
+      } else {
+        seen.set(newHash, clip)
+      }
+    } catch (err) {
+      console.error(`Failed to rehash image ${clip.image_path}:`, err)
+      // 读不出来的图片视为孤儿
+      toRemove.add(clip.id)
+      removedOrphans++
+    }
+  }
+
+  if (toRemove.size > 0) {
+    data.clips = data.clips.filter((c) => !toRemove.has(c.id))
+  }
+
+  ;(data as any).image_hash_v2_migrated = true
+
+  if (recomputed > 0 || removedOrphans > 0 || mergedDups > 0) {
+    console.log(
+      `[Migration] image hashes: recomputed=${recomputed}, removedOrphans=${removedOrphans}, mergedDuplicates=${mergedDups}`
+    )
+    // 立即持久化迁移结果
+    try {
+      atomicWriteSync(dbPath, JSON.stringify(data, null, 2))
+    } catch (err) {
+      console.error('Failed to persist migration result:', err)
+    }
+  }
+}
+
+export function insertClip(
+  content: string,
+  type: ClipType,
+  imagePath?: string,
+  /** 可选的外部 hash。图片应传入图片二进制 hash；不传则用 content 计算（仅适合文本） */
+  externalHash?: string
+): ClipRecord | null {
+  // ⚠️ 图片必须使用外部传入的 imageHash 作为 content_hash，
+  //    否则不同图片只要 preview 文本（如 "[图片 1920×1080]"）相同就会被错误去重
+  const contentHash = externalHash || hashContent(content)
 
   // 检查是否存在相同内容
   const existingIdx = data.clips.findIndex((c) => c.content_hash === contentHash)
@@ -190,6 +276,21 @@ export function insertClip(content: string, type: ClipType, imagePath?: string):
     const existing = data.clips[existingIdx]
     // created_at 保持不变（首次创建时间），仅更新 last_pasted_at 用于排序置顶
     existing.last_pasted_at = new Date().toISOString()
+    // 图片：若现有记录的 image_path 已失效（文件被清理），用新路径替换
+    if (type === 'image' && imagePath && existing.image_path !== imagePath) {
+      try {
+        if (!existing.image_path || !fs.existsSync(existing.image_path)) {
+          existing.image_path = imagePath
+        } else {
+          // 旧文件还在，新文件是冗余的，删除新文件避免磁盘泄漏
+          if (fs.existsSync(imagePath)) {
+            fs.unlinkSync(imagePath)
+          }
+        }
+      } catch (err) {
+        console.error('Failed to reconcile image path:', err)
+      }
+    }
     scheduleSave() // 防抖保存
     return existing
   }
@@ -293,7 +394,8 @@ export function getClipById(id: number): ClipRecord | undefined {
   return data.clips.find((c) => c.id === id)
 }
 
-/** 记录一次用户主动复制，更新 copy_count / first_copied_at / last_copied_at */
+/** 记录一次用户主动复制，更新 copy_count / first_copied_at / last_copied_at，
+ *  并刷新 last_pasted_at 以使该条目排序置顶 */
 export function recordCopy(id: number) {
   const clip = data.clips.find((c) => c.id === id)
   if (!clip) return
@@ -303,6 +405,8 @@ export function recordCopy(id: number) {
     clip.first_copied_at = now
   }
   clip.last_copied_at = now
+  // 同步更新最后活跃时间，使其在列表中置顶（getClips 按 last_pasted_at 排序）
+  clip.last_pasted_at = now
   scheduleSave()
 }
 

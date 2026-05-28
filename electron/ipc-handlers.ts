@@ -62,8 +62,9 @@ export function registerIpcHandlers(mainWindow: BrowserWindow) {
           const image = nativeImage.createFromPath(clip.image_path)
           clipboard.writeImage(image)
           // 更新 lastHash 防止监听器重复检测
+          // ⚠️ 必须与 clipboard-monitor.ts 中图片 hash 算法一致（全量 PNG base64 sha256）
           const imageBuffer = image.toPNG()
-          const imageHash = hashContent(imageBuffer.toString('base64').substring(0, 1000))
+          const imageHash = hashContent(imageBuffer.toString('base64'))
           updateLastHash(imageHash)
         }
       } else {

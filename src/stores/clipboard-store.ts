@@ -191,19 +191,28 @@ export const useClipboardStore = create<ClipboardStore>((set, get) => ({
         }
         return
       }
-      // 前端同步更新复制统计字段
+      // 前端同步更新复制统计字段，并把该项置顶（与后端排序保持一致）
       const now = new Date().toISOString()
-      set((state) => ({
-        clips: state.clips.map((c) => {
-          if (c.id !== id) return c
-          return {
-            ...c,
-            copy_count: (c.copy_count || 0) + 1,
-            first_copied_at: c.first_copied_at || now,
-            last_copied_at: now
-          }
+      set((state) => {
+        const target = state.clips.find((c) => c.id === id)
+        if (!target) return state
+        const updated: ClipRecord = {
+          ...target,
+          copy_count: (target.copy_count || 0) + 1,
+          first_copied_at: target.first_copied_at || now,
+          last_copied_at: now,
+          last_pasted_at: now
+        }
+        // 重新排序：收藏优先，其次按 last_pasted_at 倒序，确保 updated 移到所属分组顶部
+        const others = state.clips.filter((c) => c.id !== id)
+        const reordered = [updated, ...others].sort((a, b) => {
+          if (a.is_favorite !== b.is_favorite) return b.is_favorite - a.is_favorite
+          const aTime = new Date(a.last_pasted_at || a.created_at).getTime()
+          const bTime = new Date(b.last_pasted_at || b.created_at).getTime()
+          return bTime - aTime
         })
-      }))
+        return { ...state, clips: reordered }
+      })
       // 钉住模式下显示成功提示
       if (isPinned) {
         toast.success('已复制到剪切板')
