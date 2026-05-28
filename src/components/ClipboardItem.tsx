@@ -100,9 +100,6 @@ export default function ClipboardItem({ clip, searchQuery, isSelected }: Props) 
   }, [cancelHide])
 
   const handleMouseEnter = useCallback((e: React.MouseEvent) => {
-    // 图片类型不显示 tooltip
-    if (clip.type === 'image') return
-
     isInTooltipZoneRef.current = true
     cancelHide()
 
@@ -110,16 +107,29 @@ export default function ClipboardItem({ clip, searchQuery, isSelected }: Props) 
     if (showTooltip) return
 
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    const isImage = clip.type === 'image'
     hoverTimerRef.current = setTimeout(() => {
-      // 先计算要显示在上方还是下方
-      const tooltipHeight = 300 // 估算浮层最大高度
-      const above = rect.top > tooltipHeight + 16
-      const x = rect.left + 16
-      const y = above ? rect.top - 8 : rect.bottom + 8
-      setTooltipPos({ x, y, above })
+      if (isImage) {
+        // 图片预览：定位策略采用"上方/下方"，居中对齐条目，给大图预览更多空间
+        const previewMaxHeight = 360 // 与 CSS .clip-tooltip-image-wrap 保持一致
+        const previewEstWidth = 420
+        const above = rect.top > previewMaxHeight + 16
+        // 水平居中对齐条目，但确保不超出窗口
+        let x = rect.left + rect.width / 2 - previewEstWidth / 2
+        x = Math.max(8, Math.min(x, window.innerWidth - previewEstWidth - 8))
+        const y = above ? rect.top - 8 : rect.bottom + 8
+        setTooltipPos({ x, y, above })
+      } else {
+        // 文本 tooltip：原有上下定位逻辑
+        const tooltipHeight = 300 // 估算浮层最大高度
+        const above = rect.top > tooltipHeight + 16
+        const x = rect.left + 16
+        const y = above ? rect.top - 8 : rect.bottom + 8
+        setTooltipPos({ x, y, above })
+      }
       setShowTooltip(true)
     }, TOOLTIP_DELAY)
-  }, [clip.type, showTooltip, cancelHide])
+  }, [showTooltip, cancelHide, clip.type])
 
   const handleMouseLeave = useCallback(() => {
     if (hoverTimerRef.current) {
@@ -323,18 +333,31 @@ export default function ClipboardItem({ clip, searchQuery, isSelected }: Props) 
       {showTooltip && (
         <div
           ref={tooltipRef}
-          className={`clip-tooltip ${tooltipPos.above ? 'clip-tooltip-above' : 'clip-tooltip-below'}`}
+          className={`clip-tooltip ${clip.type === 'image' ? 'clip-tooltip-image-mode' : ''} ${tooltipPos.above ? 'clip-tooltip-above' : 'clip-tooltip-below'}`}
           onClick={handleClick}
           onMouseEnter={handleTooltipMouseEnter}
           onMouseLeave={handleTooltipMouseLeave}
           style={{
-            left: Math.min(tooltipPos.x, window.innerWidth - 340),
+            left: clip.type === 'image' ? tooltipPos.x : Math.min(tooltipPos.x, window.innerWidth - 340),
             top: tooltipPos.y,
             cursor: 'pointer',
           }}
         >
+          {/* 图片预览（大图） */}
+          {clip.type === 'image' && (
+            <div className="clip-tooltip-image-wrap">
+              {imageData ? (
+                <img src={imageData} alt="preview" className="clip-tooltip-image" />
+              ) : (
+                <div className="clip-tooltip-image-empty">
+                  {imageLoading ? '加载中…' : '图片已失效'}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* 完整文本内容（仅较长文本才展示完整内容区） */}
-          {(clip.content.length > 80 || clip.content.includes('\n')) && (
+          {clip.type !== 'image' && (clip.content.length > 80 || clip.content.includes('\n')) && (
             <div className="clip-tooltip-content">
               {clip.content}
             </div>
