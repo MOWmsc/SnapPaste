@@ -4,7 +4,7 @@
 
 <p>
   <img src="https://img.shields.io/badge/platform-macOS-lightgrey.svg" alt="platform" />
-  <img src="https://img.shields.io/badge/version-1.0.3-blue.svg" alt="version" />
+  <img src="https://img.shields.io/badge/version-1.0.5-blue.svg" alt="version" />
   <img src="https://img.shields.io/badge/electron-33-9feaf9.svg" alt="electron" />
   <img src="https://img.shields.io/badge/react-18-61dafb.svg" alt="react" />
   <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="license" />
@@ -153,6 +153,14 @@ SnapPaste/
 可在「设置 → 数据存储」页查看并跳转到 Finder。
 
 ## 📅 更新日志
+
+### v1.0.5 (2026-05-29)
+- 🎯 图片预览**智能定位**：根据条目所处位置自动选择上方/下方弹出
+- 🐛 修复底部图片项 hover 时大图预览被主窗口下边缘裁切的问题
+- 📐 tooltip 高度在 200px ~ 480px 之间随可用空间动态调整，图片按比例缩放
+
+### v1.0.4 (2026-05-29)
+- 🐛 修复大图预览 tooltip 宽度被内部内容压缩、显得不够大的问题（CSS 优先级与 `width: auto` 收缩问题）
 
 ### v1.0.3 (2026-05-28)
 - ✨ 图片项 hover 显示**大图预览** + 复制统计 tooltip
