@@ -21,6 +21,8 @@ export default function ClipboardItem({ clip, searchQuery, isSelected }: Props) 
   const [menuPos, setMenuPos] = useState({ x: 0, y: 0 })
   const [showTooltip, setShowTooltip] = useState(false)
   const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number; above: boolean }>({ x: 0, y: 0, above: true })
+  // 图片预览模式下，根据可用空间动态调整 tooltip 高度（避免被窗口裁切）
+  const [previewHeight, setPreviewHeight] = useState<number | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const itemRef = useRef<HTMLDivElement>(null)
   const tooltipRef = useRef<HTMLDivElement>(null)
@@ -110,14 +112,29 @@ export default function ClipboardItem({ clip, searchQuery, isSelected }: Props) 
     const isImage = clip.type === 'image'
     hoverTimerRef.current = setTimeout(() => {
       if (isImage) {
-        // 图片预览：定位策略采用"上方/下方"，居中对齐条目，给大图预览更多空间
-        const previewMaxHeight = 360 // 与 CSS .clip-tooltip-image-wrap 保持一致
-        const previewEstWidth = 420
-        const above = rect.top > previewMaxHeight + 16
-        // 水平居中对齐条目，但确保不超出窗口
-        let x = rect.left + rect.width / 2 - previewEstWidth / 2
-        x = Math.max(8, Math.min(x, window.innerWidth - previewEstWidth - 8))
-        const y = above ? rect.top - 8 : rect.bottom + 8
+        // 图片预览：智能定位 — 选上下方向中可用空间更大的一侧，并根据该空间动态决定 tooltip 高度
+        // 避免主窗口尺寸有限（680×600）时 tooltip 被裁切
+        const previewWidth = 480 // 与 CSS .clip-tooltip-image-mode width 一致
+        const PREVIEW_MAX_HEIGHT = 480 // 整个 tooltip 上限（统计区 + 图片区）
+        const PREVIEW_MIN_HEIGHT = 200 // 太小就没意义了
+        const GAP = 8 // 与条目的间距
+        const SAFE_MARGIN = 8 // 距离窗口边缘留白
+
+        const spaceAbove = rect.top - SAFE_MARGIN - GAP
+        const spaceBelow = window.innerHeight - rect.bottom - SAFE_MARGIN - GAP
+        // 选空间更大的一侧；若两边都不够也选较大那侧（至少不会更糟）
+        const above = spaceAbove >= spaceBelow
+        const availableSpace = above ? spaceAbove : spaceBelow
+        // 动态高度：取 min(可用空间, 设计上限)，保底 200px
+        const finalHeight = Math.max(PREVIEW_MIN_HEIGHT, Math.min(availableSpace, PREVIEW_MAX_HEIGHT))
+
+        // 水平居中对齐条目，并确保不超出窗口
+        let x = rect.left + rect.width / 2 - previewWidth / 2
+        x = Math.max(SAFE_MARGIN, Math.min(x, window.innerWidth - previewWidth - SAFE_MARGIN))
+        // 垂直位置：above 时给定 tooltip 的"底边"位置（CSS 用 translateY(-100%) 上推）
+        //          below 时给定 tooltip 的"顶边"位置
+        const y = above ? rect.top - GAP : rect.bottom + GAP
+        setPreviewHeight(finalHeight)
         setTooltipPos({ x, y, above })
       } else {
         // 文本 tooltip：原有上下定位逻辑
@@ -125,6 +142,7 @@ export default function ClipboardItem({ clip, searchQuery, isSelected }: Props) 
         const above = rect.top > tooltipHeight + 16
         const x = rect.left + 16
         const y = above ? rect.top - 8 : rect.bottom + 8
+        setPreviewHeight(null)
         setTooltipPos({ x, y, above })
       }
       setShowTooltip(true)
@@ -341,11 +359,23 @@ export default function ClipboardItem({ clip, searchQuery, isSelected }: Props) 
             left: clip.type === 'image' ? tooltipPos.x : Math.min(tooltipPos.x, window.innerWidth - 340),
             top: tooltipPos.y,
             cursor: 'pointer',
+            // 图片模式：根据可用空间动态限制 tooltip 总高度，避免被主窗口裁切
+            ...(clip.type === 'image' && previewHeight
+              ? { maxHeight: previewHeight, height: previewHeight }
+              : {}),
           }}
         >
           {/* 图片预览（大图） */}
           {clip.type === 'image' && (
-            <div className="clip-tooltip-image-wrap">
+            <div
+              className="clip-tooltip-image-wrap"
+              style={
+                // 给图片区分配 = (tooltip总高 - 统计区估算高 ~136px)
+                previewHeight
+                  ? { height: Math.max(80, previewHeight - 136), maxHeight: 'none' }
+                  : undefined
+              }
+            >
               {imageData ? (
                 <img src={imageData} alt="preview" className="clip-tooltip-image" />
               ) : (

@@ -1,6 +1,6 @@
 {
   "name": "snappaste",
-  "version": "1.0.3",
+  "version": "1.0.5",
   "description": "SnapPaste — 快捷剪切板管理工具",
   "main": "dist-electron/main.js",
   "scripts": {

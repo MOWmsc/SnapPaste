@@ -188,36 +188,37 @@ html, body {
   font-variant-numeric: tabular-nums;
 }
 
-/* 图片预览模式：tooltip 比文本模式更宽，容纳大图 */
-.clip-tooltip-image-mode {
-  width: auto;
+/* 图片预览模式：tooltip 固定 480px 宽，容纳大图（覆盖 .clip-tooltip 的 320px / max-height: 340px） */
+.clip-tooltip.clip-tooltip-image-mode {
+  width: 480px;
   max-width: 480px;
   max-height: none;
 }
 
 .clip-tooltip-image-wrap {
-  padding: 8px;
+  padding: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
-  /* 给大图留足空间 */
-  min-width: 240px;
-  min-height: 120px;
+  /* 容器宽度由父级 480px 撑开，这里只控制高度 */
+  width: 100%;
+  min-height: 200px;
   max-height: 360px;
   overflow: hidden;
+  box-sizing: border-box;
 }
 
 .clip-tooltip-image {
-  max-width: 100%;
-  max-height: 344px; /* 360 - padding*2 */
+  /* 图片自适应父容器 .clip-tooltip-image-wrap：最大宽 456 = 480 - padding 24，最大高 = 父高度 100% */
+  max-width: 456px;
+  max-height: 100%;
   width: auto;
   height: auto;
   object-fit: contain;
   border-radius: 6px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-  /* 关键：使用真实像素渲染，避免被父级宽度压缩失真 */
   display: block;
 }
 
