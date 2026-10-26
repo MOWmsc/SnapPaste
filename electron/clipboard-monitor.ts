@@ -6,7 +6,10 @@ import { app } from 'electron'
 import type { ClipType } from '../src/types'
 
 let monitorTimer: NodeJS.Timeout | null = null
-let lastHash = ''
+// 文本与图片分别记录最近一次入库的 hash：图文混排时两者会同时入库，
+// 共用一个 hash 会导致每轮轮询互相判为「已变化」而重复插入。
+let lastTextHash = ''
+let lastImageHash = ''
 let onChangeCallback: (() => void) | null = null
 
 // Electron 的 clipboard 没有暴露 NSPasteboard.changeCount，
@@ -31,20 +34,26 @@ function getImageDir(): string {
 }
 
 /**
- * 允许外部更新 lastHash（复制操作后调用，防止重复检测）
+ * 允许外部更新已入库 hash（复制操作后调用，防止重复检测）
  */
-export function updateLastHash(hash: string) {
-  lastHash = hash
+export function updateLastHash(hash: string, type: 'text' | 'image' = 'text') {
+  if (type === 'image') {
+    lastImageHash = hash
+  } else {
+    lastTextHash = hash
+  }
 }
 
 function checkClipboard() {
   try {
-    // 优先文本（读取成本远低于图片）
+    let changed = false
+
+    // 文本（读取成本远低于图片）
     const text = clipboard.readText()
     if (text && text.trim()) {
       const textHash = hashContent(text)
-      if (textHash !== lastHash) {
-        lastHash = textHash
+      if (textHash !== lastTextHash) {
+        lastTextHash = textHash
 
         // 判断是否为文件路径
         let type: ClipType = 'text'
@@ -59,42 +68,48 @@ function checkClipboard() {
         }
 
         insertClip(text, type)
-        onChangeCallback?.()
-        markActive()
-        return
+        changed = true
       }
     }
 
-    // 图片检测放在最后（成本最高，仅当文本也没有内容时才执行）
+    // 图片：不再因为文本非空就跳过。
+    // 从 Word / 浏览器复制图文混排的内容时，粘贴板里同时有文字和图片，
+    // 之前只存文字会把图片静默丢掉，这里改为两者各存一条。
     const formats = clipboard.availableFormats()
     const hasImage = formats.some((f) => f.startsWith('image/'))
     if (hasImage) {
       // 剪贴板里停留一张图时，避免每轮都解码 + 编码
       const now = Date.now()
-      if (now - lastImageCheckTs < IMAGE_RECHECK_MS) return
-      lastImageCheckTs = now
+      if (now - lastImageCheckTs >= IMAGE_RECHECK_MS) {
+        lastImageCheckTs = now
 
-      const image = clipboard.readImage()
-      if (!image.isEmpty()) {
-        const imageBuffer = image.toPNG()
-        // 使用完整 PNG buffer 的 sha256 作为图片 hash，避免不同图片碰撞
-        const imageHash = hashContent(imageBuffer.toString('base64'))
+        const image = clipboard.readImage()
+        if (!image.isEmpty()) {
+          const imageBuffer = image.toPNG()
+          // 使用完整 PNG buffer 的 sha256 作为图片 hash，避免不同图片碰撞
+          const imageHash = hashContent(imageBuffer.toString('base64'))
 
-        if (imageHash !== lastHash) {
-          lastHash = imageHash
+          if (imageHash !== lastImageHash) {
+            lastImageHash = imageHash
 
-          const fileName = `clip_${Date.now()}.png`
-          const imagePath = path.join(getImageDir(), fileName)
-          fs.writeFileSync(imagePath, imageBuffer)
+            const fileName = `clip_${Date.now()}.png`
+            const imagePath = path.join(getImageDir(), fileName)
+            fs.writeFileSync(imagePath, imageBuffer)
 
-          const preview = `[图片 ${image.getSize().width}×${image.getSize().height}]`
-          // ⚠️ 必须传入 imageHash 作为 externalHash，
-          //    否则 insertClip 内部会用 hashContent(preview) 导致同尺寸图片被错误去重
-          insertClip(preview, 'image', imagePath, imageHash)
-          onChangeCallback?.()
-          markActive()
+            const preview = `[图片 ${image.getSize().width}×${image.getSize().height}]`
+            // ⚠️ 必须传入 imageHash 作为 externalHash，
+            //    否则 insertClip 内部会用 hashContent(preview) 导致同尺寸图片被错误去重
+            insertClip(preview, 'image', imagePath, imageHash)
+            changed = true
+          }
         }
       }
+    }
+
+    // 同一次变化只通知一次，避免图文混排时刷新两遍列表
+    if (changed) {
+      onChangeCallback?.()
+      markActive()
     }
   } catch (err) {
     console.error('Clipboard monitor error:', err)
@@ -128,7 +143,7 @@ export function startMonitor(onChange: () => void) {
   // 初始化当前剪切板状态
   const currentText = clipboard.readText()
   if (currentText) {
-    lastHash = hashContent(currentText)
+    lastTextHash = hashContent(currentText)
   }
 
   setInterval_(POLL_IDLE)

@@ -65,7 +65,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow) {
           // ⚠️ 必须与 clipboard-monitor.ts 中图片 hash 算法一致（全量 PNG base64 sha256）
           const imageBuffer = image.toPNG()
           const imageHash = hashContent(imageBuffer.toString('base64'))
-          updateLastHash(imageHash)
+          updateLastHash(imageHash, 'image')
         }
       } else {
         clipboard.writeText(clip.content)
