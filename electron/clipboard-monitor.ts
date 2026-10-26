@@ -7,8 +7,13 @@ import type { ClipType } from '../src/types'
 
 let monitorTimer: NodeJS.Timeout | null = null
 let lastHash = ''
-let lastChangeCount = -1 // Electron 提供的剪切板变化计数器
 let onChangeCallback: (() => void) | null = null
+
+// Electron 的 clipboard 没有暴露 NSPasteboard.changeCount，
+// 无法做「计数器变了才读内容」的零成本检测，只能轮询。
+// 图片分支要做解码 + PNG 编码，成本远高于文本，因此限制为最多每秒检查一次。
+const IMAGE_RECHECK_MS = 1000
+let lastImageCheckTs = 0
 
 // 自适应轮询：空闲 800ms，活跃后短时间内 300ms
 const POLL_IDLE = 800
@@ -30,27 +35,11 @@ function getImageDir(): string {
  */
 export function updateLastHash(hash: string) {
   lastHash = hash
-  // 同步更新 changeCount，避免下一轮被误判
-  try {
-    lastChangeCount = (clipboard as any).readChangeCount?.() ?? lastChangeCount
-  } catch {}
 }
 
 function checkClipboard() {
   try {
-    // ✅ 关键优化：先用 changeCount 快速判断剪切板是否变化
-    // 这是一个原生整数计数器，O(1) 操作，几乎零成本
-    // 只有计数器变化了，才需要真正去读取并编码内容
-    const changeCount = (clipboard as any).readChangeCount?.()
-    if (typeof changeCount === 'number') {
-      if (changeCount === lastChangeCount) {
-        return // 剪切板未变化，直接跳过本轮所有重活
-      }
-      lastChangeCount = changeCount
-    }
-
-    // 走到这里说明剪切板确实变化了 — 这是低频路径
-    // 优先文本（编码成本远低于图片）
+    // 优先文本（读取成本远低于图片）
     const text = clipboard.readText()
     if (text && text.trim()) {
       const textHash = hashContent(text)
@@ -76,11 +65,15 @@ function checkClipboard() {
       }
     }
 
-    // 图片检测放在最后（成本最高，仅当文本也无变化时才执行一次）
-    // 由于 changeCount 已经过滤，这里不会被反复触发
+    // 图片检测放在最后（成本最高，仅当文本也没有内容时才执行）
     const formats = clipboard.availableFormats()
     const hasImage = formats.some((f) => f.startsWith('image/'))
     if (hasImage) {
+      // 剪贴板里停留一张图时，避免每轮都解码 + 编码
+      const now = Date.now()
+      if (now - lastImageCheckTs < IMAGE_RECHECK_MS) return
+      lastImageCheckTs = now
+
       const image = clipboard.readImage()
       if (!image.isEmpty()) {
         const imageBuffer = image.toPNG()
@@ -133,9 +126,6 @@ export function startMonitor(onChange: () => void) {
   onChangeCallback = onChange
 
   // 初始化当前剪切板状态
-  try {
-    lastChangeCount = (clipboard as any).readChangeCount?.() ?? -1
-  } catch {}
   const currentText = clipboard.readText()
   if (currentText) {
     lastHash = hashContent(currentText)

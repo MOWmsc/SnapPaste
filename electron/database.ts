@@ -241,7 +241,16 @@ function migrateImageHashes() {
   }
 
   if (toRemove.size > 0) {
+    const dropped = data.clips.filter((c) => toRemove.has(c.id))
     data.clips = data.clips.filter((c) => !toRemove.has(c.id))
+    // 被合并/删除的记录同步删图；若同文件仍被保留记录引用则不删
+    const stillReferenced = new Set(
+      data.clips.filter((c) => c.image_path).map((c) => path.basename(c.image_path as string))
+    )
+    for (const clip of dropped) {
+      if (clip.image_path && stillReferenced.has(path.basename(clip.image_path))) continue
+      unlinkClipImage(clip)
+    }
   }
 
   ;(data as any).image_hash_v2_migrated = true
@@ -415,7 +424,28 @@ export function clearAll() {
   saveNow()
 }
 
+/**
+ * 删除记录对应的图片文件。
+ * 安全边界：只删 clipboard-images 目录内的文件，防止脏数据把任意路径删掉。
+ */
+function unlinkClipImage(clip: Pick<ClipRecord, 'image_path'>) {
+  if (!clip.image_path) return
+  const imagesDir = path.join(app.getPath('userData'), 'clipboard-images')
+  const target = path.resolve(clip.image_path)
+  if (!target.startsWith(path.resolve(imagesDir) + path.sep)) return
+  try {
+    if (fs.existsSync(target)) {
+      fs.unlinkSync(target)
+    }
+  } catch (err) {
+    console.error('Failed to delete image file:', target, err)
+  }
+}
+
 function cleanOldRecords() {
+  // 被清理掉的记录要同步删除图片文件，否则只删记录会留下孤儿文件
+  const removed: ClipRecord[] = []
+
   // retentionDays 为 -1 时永久保留，不按时间清理
   if (settings.retentionDays !== -1) {
     const now = new Date().getTime()
@@ -424,7 +454,9 @@ function cleanOldRecords() {
     data.clips = data.clips.filter((c) => {
       if (c.is_favorite) return true
       const activeTime = new Date(c.last_pasted_at || c.created_at).getTime()
-      return now - activeTime < retentionMs
+      if (now - activeTime < retentionMs) return true
+      removed.push(c)
+      return false
     })
   }
 
@@ -437,9 +469,15 @@ function cleanOldRecords() {
         const bTime = new Date(b.last_pasted_at || b.created_at).getTime()
         return bTime - aTime
       })
-      const toRemove = new Set(nonFavorites.slice(settings.maxRecords).map((c) => c.id))
+      const dropped = nonFavorites.slice(settings.maxRecords)
+      const toRemove = new Set(dropped.map((c) => c.id))
       data.clips = data.clips.filter((c) => c.is_favorite || !toRemove.has(c.id))
+      removed.push(...dropped)
     }
+  }
+
+  for (const clip of removed) {
+    unlinkClipImage(clip)
   }
 }
 
