@@ -4,7 +4,7 @@
 
 <p>
   <img src="https://img.shields.io/badge/platform-macOS-lightgrey.svg" alt="platform" />
-  <img src="https://img.shields.io/badge/version-1.0.6-blue.svg" alt="version" />
+  <img src="https://img.shields.io/badge/version-1.0.7-blue.svg" alt="version" />
   <img src="https://img.shields.io/badge/electron-33-9feaf9.svg" alt="electron" />
   <img src="https://img.shields.io/badge/react-18-61dafb.svg" alt="react" />
   <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="license" />
@@ -153,6 +153,13 @@ SnapPaste/
 可在「设置 → 数据存储」页查看并跳转到 Finder。
 
 ## 📅 更新日志
+
+### v1.0.7 (2026-10-29)
+- 🛡️ **修复数据可能被写坏/丢失**：后台防抖写盘与删除、收藏的写盘互相覆盖（已删除的记录会被写回、新复制的记录会丢），改为写盘串行化，进行中再有改动则写完后补写最新快照
+- 🛡️ 数据文件读取失败时不再用空数据开局覆盖原文件，先改名为 `.corrupt-<时间戳>` 保留；连改名也失败则本次运行不写盘
+- 🛡️ 退出应用时同步保存最近 1 秒内尚未落盘的改动
+- 🐛 修复 v1.0.6 引入的回归：「复制图 A → 复制文字 → 再复制图 A」第二次不会置顶、看起来像没记录；文字同理
+- ⚡️ 删除、收藏不再同步写 30MB+ 的数据文件阻塞主进程
 
 ### v1.0.6 (2026-10-26)
 - 🐛 **图文混排不再丢图**：从 Word / 浏览器复制含图片的段落时，文字与图片各存一条记录（此前图片被静默丢弃）
