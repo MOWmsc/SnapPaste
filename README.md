@@ -4,7 +4,7 @@
 
 <p>
   <img src="https://img.shields.io/badge/platform-macOS-lightgrey.svg" alt="platform" />
-  <img src="https://img.shields.io/badge/version-1.0.5-blue.svg" alt="version" />
+  <img src="https://img.shields.io/badge/version-1.0.6-blue.svg" alt="version" />
   <img src="https://img.shields.io/badge/electron-33-9feaf9.svg" alt="electron" />
   <img src="https://img.shields.io/badge/react-18-61dafb.svg" alt="react" />
   <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="license" />
@@ -153,6 +153,12 @@ SnapPaste/
 可在「设置 → 数据存储」页查看并跳转到 Finder。
 
 ## 📅 更新日志
+
+### v1.0.6 (2026-10-26)
+- 🐛 **图文混排不再丢图**：从 Word / 浏览器复制含图片的段落时，文字与图片各存一条记录（此前图片被静默丢弃）
+- 🐛 删除记录（超出条数/天数限制）时同步删除对应图片文件，不再遗留孤儿图片
+- ⚡️ 图片检测限频每秒一次，剪贴板停留图片时不再每轮重复编码与计算哈希
+- 🔧 移除无效的 `changeCount` 快路径调用（Electron 未暴露该接口，原分支从未生效）
 
 ### v1.0.5 (2026-05-29)
 - 🎯 图片预览**智能定位**：根据条目所处位置自动选择上方/下方弹出
