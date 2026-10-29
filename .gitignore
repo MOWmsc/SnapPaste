@@ -5,3 +5,4 @@ release
 *.local
 .DS_Store
 clipboard-images/
+.codebuddy/

@@ -1,5 +1,6 @@
 import { clipboard, nativeImage } from 'electron'
 import { insertClip, hashContent } from './database'
+import crypto from 'crypto'
 import path from 'path'
 import fs from 'fs'
 import { app } from 'electron'
@@ -10,13 +11,20 @@ let monitorTimer: NodeJS.Timeout | null = null
 // 共用一个 hash 会导致每轮轮询互相判为「已变化」而重复插入。
 let lastTextHash = ''
 let lastImageHash = ''
+// 剪贴板里那张图的原始位图 hash，仅用于判断「图有没有换」。
+// 位图是内存拷贝，比把图片重新 PNG 编码（zlib 压缩）便宜一个数量级。
+let lastImageBitmapHash = ''
 let onChangeCallback: (() => void) | null = null
+
+const hashBuffer = (buf: Buffer) => crypto.createHash('sha256').update(buf).digest('hex')
 
 // Electron 的 clipboard 没有暴露 NSPasteboard.changeCount，
 // 无法做「计数器变了才读内容」的零成本检测，只能轮询。
-// 图片分支要做解码 + PNG 编码，成本远高于文本，因此限制为最多每秒检查一次。
+// 图片解码成本高于文本，因此仍限制为最多每秒检查一次；
+// 但剪贴板里刚出现图片时会立即检查一次，避免漏掉紧接着的复制。
 const IMAGE_RECHECK_MS = 1000
 let lastImageCheckTs = 0
+let hadImageLastPoll = false
 
 // 自适应轮询：空闲 800ms，活跃后短时间内 300ms
 const POLL_IDLE = 800
@@ -81,29 +89,38 @@ function checkClipboard() {
     const formats = clipboard.availableFormats()
     const hasImage = formats.some((f) => f.startsWith('image/'))
     if (hasImage) {
-      // 剪贴板里停留一张图时，避免每轮都解码 + 编码
+      // 剪贴板里停留同一张图时避免反复处理；刚出现图片时立即检查一次
       const now = Date.now()
-      if (now - lastImageCheckTs >= IMAGE_RECHECK_MS) {
+      const appeared = !hadImageLastPoll
+      hadImageLastPoll = true
+      if (appeared || now - lastImageCheckTs >= IMAGE_RECHECK_MS) {
         lastImageCheckTs = now
 
         const image = clipboard.readImage()
         if (!image.isEmpty()) {
-          const imageBuffer = image.toPNG()
-          // 使用完整 PNG buffer 的 sha256 作为图片 hash，避免不同图片碰撞
-          const imageHash = hashContent(imageBuffer.toString('base64'))
+          // 先用原始位图判断是否换了图：toBitmap 只是内存拷贝，
+          // 不必为了比较而把整张图 PNG 压缩一遍（旧实现每秒压一次）
+          const bitmapHash = hashBuffer(image.toBitmap())
+          if (bitmapHash !== lastImageBitmapHash) {
+            lastImageBitmapHash = bitmapHash
 
-          if (imageHash !== lastImageHash) {
-            lastImageHash = imageHash
+            const imageBuffer = image.toPNG()
+            // 入库仍用完整 PNG buffer 的 sha256，与历史记录保持一致
+            const imageHash = hashContent(imageBuffer.toString('base64'))
 
-            const fileName = `clip_${Date.now()}.png`
-            const imagePath = path.join(getImageDir(), fileName)
-            fs.writeFileSync(imagePath, imageBuffer)
+            if (imageHash !== lastImageHash) {
+              lastImageHash = imageHash
 
-            const preview = `[图片 ${image.getSize().width}×${image.getSize().height}]`
-            // ⚠️ 必须传入 imageHash 作为 externalHash，
-            //    否则 insertClip 内部会用 hashContent(preview) 导致同尺寸图片被错误去重
-            insertClip(preview, 'image', imagePath, imageHash)
-            changed = true
+              const fileName = `clip_${Date.now()}.png`
+              const imagePath = path.join(getImageDir(), fileName)
+              fs.writeFileSync(imagePath, imageBuffer)
+
+              const preview = `[图片 ${image.getSize().width}×${image.getSize().height}]`
+              // ⚠️ 必须传入 imageHash 作为 externalHash，
+              //    否则 insertClip 内部会用 hashContent(preview) 导致同尺寸图片被错误去重
+              insertClip(preview, 'image', imagePath, imageHash)
+              changed = true
+            }
           }
         }
       }
@@ -111,6 +128,8 @@ function checkClipboard() {
       // 剪贴板里已没有图片：清空记忆。否则「复制图 A → 复制文字 → 再复制图 A」时
       // 第二次复制与记忆中的 hash 相同会被直接忽略，图 A 不会置顶，看起来像没记录
       lastImageHash = ''
+      lastImageBitmapHash = ''
+      hadImageLastPoll = false
     }
 
     // 同一次变化只通知一次，避免图文混排时刷新两遍列表
@@ -151,6 +170,15 @@ export function startMonitor(onChange: () => void) {
   const currentText = clipboard.readText()
   if (currentText) {
     lastTextHash = hashContent(currentText)
+  }
+
+  // 启动时剪贴板里已有的图片也要记住，否则它会在第一轮轮询时被当成新内容再录一次
+  if (clipboard.availableFormats().some((f) => f.startsWith('image/'))) {
+    const image = clipboard.readImage()
+    if (!image.isEmpty()) {
+      lastImageBitmapHash = hashBuffer(image.toBitmap())
+      hadImageLastPoll = true
+    }
   }
 
   setInterval_(POLL_IDLE)

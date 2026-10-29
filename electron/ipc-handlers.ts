@@ -133,10 +133,12 @@ export function registerIpcHandlers(mainWindow: BrowserWindow) {
   // 获取图片 base64（限制只能读取 clipboard-images 目录下的图片）
   ipcMain.handle('get-image-base64', (_event, imagePath: string) => {
     try {
-      // 安全检查：只允许读取 clipboard-images 目录下的文件
+      // 安全检查：只允许读取 clipboard-images 目录内部的文件。
+      // 用 path.relative 判断，避免 "clipboard-images-xxx/" 这类同级目录靠前缀绕过
       const allowedDir = path.join(app.getPath('userData'), 'clipboard-images')
       const resolvedPath = path.resolve(imagePath)
-      if (!resolvedPath.startsWith(allowedDir)) {
+      const rel = path.relative(allowedDir, resolvedPath)
+      if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) {
         console.error('Blocked read attempt outside clipboard-images:', imagePath)
         return null
       }
@@ -164,10 +166,11 @@ export function registerIpcHandlers(mainWindow: BrowserWindow) {
 
   // 在 Finder 中显示文件/文件夹
   ipcMain.handle('show-in-folder', (_event, filePath: string) => {
-    // 安全检查：只允许打开 userData 目录下的路径
+    // 安全检查：只允许打开 userData 目录及其内部路径
     const userDataDir = app.getPath('userData')
     const resolvedPath = path.resolve(filePath)
-    if (!resolvedPath.startsWith(userDataDir)) {
+    const rel = path.relative(userDataDir, resolvedPath)
+    if (rel.startsWith('..') || path.isAbsolute(rel)) {
       console.error('Blocked folder open attempt outside userData:', filePath)
       return false
     }

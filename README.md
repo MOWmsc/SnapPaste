@@ -4,7 +4,7 @@
 
 <p>
   <img src="https://img.shields.io/badge/platform-macOS-lightgrey.svg" alt="platform" />
-  <img src="https://img.shields.io/badge/version-1.0.8-blue.svg" alt="version" />
+  <img src="https://img.shields.io/badge/version-1.0.9-blue.svg" alt="version" />
   <img src="https://img.shields.io/badge/electron-33-9feaf9.svg" alt="electron" />
   <img src="https://img.shields.io/badge/react-18-61dafb.svg" alt="react" />
   <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="license" />
@@ -155,6 +155,14 @@ Electron 的 `clipboard` 没有暴露 macOS 的 `changeCount`，无法做「计�
 可在「设置 → 数据存储」页查看并跳转到 Finder。
 
 ## 📅 更新日志
+
+### v1.0.9 (2026-10-29)
+- 🐛 **修复搜索快速切换时结果停在旧关键词**：旧实现用 `isLoading` 直接丢弃新请求，请求一慢，最后一次输入就发不出去；改为请求序号，只有最后一次请求写状态，旧结果自动作废
+- ⚡️ **剪贴板停留图片时不再每秒重新 PNG 压缩**：改用原始位图比对是否换图，编码次数从「每秒一次」降到「换图时一次」
+- 🐛 **启动时剪贴板里已有的图片不再被重复收录**（此前只记了文字的 hash，图片会在首轮轮询被当成新内容）
+- 🐛 **图片缓存加双重上限**（80 条 / 24MB 字符），长时间滚动不再让内存无限增长
+- 🔒 读图与「在访达中显示」的路径校验改用 `path.relative`，避免 `clipboard-images-xxx/` 这类同级目录靠前缀绕过
+- 🧹 `.codebuddy/` 加入忽略列表，不再纳入版本库
 
 ### v1.0.8 (2026-10-29)
 - 🗄️ **持久化从 JSON 迁移到 SQLite**（better-sqlite3 + WAL）：新增/删除/收藏只写单条记录，不再整份重写几十 MB 的数据文件

@@ -48,6 +48,10 @@ const PAGE_SIZE = 50
 let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null
 const SEARCH_DEBOUNCE_MS = 300
 
+// 请求序号：只允许最后一次请求写入状态。
+// 旧实现用 isLoading 直接丢弃新请求，快速输入时会停在旧关键词的结果上。
+let fetchSeq = 0
+
 export const useClipboardStore = create<ClipboardStore>((set, get) => ({
   clips: [],
   totalCount: 0,
@@ -96,8 +100,10 @@ export const useClipboardStore = create<ClipboardStore>((set, get) => ({
 
   fetchClips: async (reset = false) => {
     const { searchQuery, filterType, viewMode, clips, isLoading } = get()
-    if (isLoading) return
+    // 追加分页时避免重复请求；重载（搜索/切筛选/刷新）始终放行，由序号决定谁生效
+    if (!reset && isLoading) return
 
+    const seq = ++fetchSeq
     set({ isLoading: true })
 
     try {
@@ -119,6 +125,9 @@ export const useClipboardStore = create<ClipboardStore>((set, get) => ({
         })
       ])
 
+      // 期间已有更新的请求发出，丢弃本次结果
+      if (seq !== fetchSeq) return
+
       set({
         clips: reset ? newClips : [...clips, ...newClips],
         totalCount: count,
@@ -126,7 +135,7 @@ export const useClipboardStore = create<ClipboardStore>((set, get) => ({
       })
     } catch (err) {
       console.error('Failed to fetch clips:', err)
-      set({ isLoading: false })
+      if (seq === fetchSeq) set({ isLoading: false })
     }
   },
 

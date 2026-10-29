@@ -8,8 +8,41 @@ interface Props {
   isSelected?: boolean
 }
 
-// 图片缓存（避免重复 IPC 请求）
+// 图片缓存（避免重复 IPC 请求）。
+// 之前是无上限 Map，一路滚动会把几千张图的 base64 全留在内存里。
+// 现按「条数 + 总字符数」双上限淘汰最久未使用的条目（Map 保持插入顺序）。
+const IMAGE_CACHE_MAX_ENTRIES = 80
+const IMAGE_CACHE_MAX_CHARS = 24 * 1024 * 1024 // base64 字符串长度上限
 const imageCache = new Map<string, string>()
+let imageCacheChars = 0
+
+function cacheGet(key: string): string | undefined {
+  const hit = imageCache.get(key)
+  if (hit === undefined) return undefined
+  // 命中后移到末尾，标记为最近使用
+  imageCache.delete(key)
+  imageCache.set(key, hit)
+  return hit
+}
+
+function cacheSet(key: string, value: string) {
+  const prev = imageCache.get(key)
+  if (prev !== undefined) {
+    imageCacheChars -= prev.length
+    imageCache.delete(key)
+  }
+  imageCache.set(key, value)
+  imageCacheChars += value.length
+  while (imageCache.size > IMAGE_CACHE_MAX_ENTRIES || imageCacheChars > IMAGE_CACHE_MAX_CHARS) {
+    const oldest = imageCache.keys().next()
+    if (oldest.done) break
+    // 仅有一条且超限时保留它，避免刚加载就被淘汰
+    if (imageCache.size === 1) break
+    const evicted = imageCache.get(oldest.value)
+    imageCache.delete(oldest.value)
+    imageCacheChars -= evicted ? evicted.length : 0
+  }
+}
 
 // Tooltip 延迟（ms）
 const TOOLTIP_DELAY = 500
@@ -39,7 +72,7 @@ export default function ClipboardItem({ clip, searchQuery, isSelected }: Props) 
   useEffect(() => {
     if (clip.type === 'image' && clip.image_path) {
       // 检查缓存
-      const cached = imageCache.get(clip.image_path)
+      const cached = cacheGet(clip.image_path)
       if (cached) {
         setImageData(cached)
         return
@@ -48,7 +81,7 @@ export default function ClipboardItem({ clip, searchQuery, isSelected }: Props) 
       setImageLoading(true)
       window.imageAPI.getImageBase64(clip.image_path).then((data) => {
         if (data) {
-          imageCache.set(clip.image_path!, data)
+          cacheSet(clip.image_path!, data)
           setImageData(data)
         }
         setImageLoading(false)
