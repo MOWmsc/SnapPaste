@@ -1,6 +1,6 @@
 import { app, BrowserWindow, globalShortcut, screen } from 'electron'
 import path from 'path'
-import { initDatabase, getSettings } from './database'
+import { initDatabase, getSettings, flushDatabaseSync } from './database'
 import { startMonitor, stopMonitor, updateLastHash } from './clipboard-monitor'
 import { createTray, destroyTray } from './tray'
 import { registerIpcHandlers } from './ipc-handlers'
@@ -147,6 +147,8 @@ app.on('before-quit', () => {
 
 app.on('will-quit', () => {
   stopMonitor()
+  // 防抖窗口内（最近 1s）的改动在退出前落盘
+  flushDatabaseSync()
   destroyTray()
   globalShortcut.unregisterAll()
 })

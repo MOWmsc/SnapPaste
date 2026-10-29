@@ -25,66 +25,115 @@ let settingsPath: string
 let saveTimer: NodeJS.Timeout | null = null
 const SAVE_DEBOUNCE_MS = 1000
 
+// 写盘串行化：同一时刻只允许一次数据库写入。
+// 旧实现里后台写入与删除/收藏触发的同步写入共用同一个 .tmp，
+// 后台写入期间同步写入先完成 rename，随后后台写入再把旧快照 rename 上去，
+// 刚删除的记录被写回、刚复制的记录丢失。
+let writing = false
+// 内存数据有尚未落盘的改动
+let dirty = false
+// 退出前已做最终同步写入，之后的后台写入不得再覆盖
+let closed = false
+// 数据文件读取失败且未能备份时禁止写盘，避免用空数据覆盖用户的原文件
+let writeBlocked = false
+
 /**
  * 原子写入文件：先写临时文件，再 rename 覆盖目标文件
  * 防止写入中途崩溃导致数据丢失
  */
-function atomicWriteSync(filePath: string, content: string) {
-  const tmpPath = filePath + '.tmp'
+function atomicWriteSync(filePath: string, content: string, tmpSuffix = '.tmp') {
+  const tmpPath = filePath + tmpSuffix
   fs.writeFileSync(tmpPath, content, 'utf-8')
   fs.renameSync(tmpPath, filePath)
 }
 
 /**
- * 异步原子写入
+ * 后台写入数据库。进行中再有改动时只标记 dirty，写完后再写一次最新快照。
  */
-function atomicWriteAsync(filePath: string, content: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const tmpPath = filePath + '.tmp'
-    fs.writeFile(tmpPath, content, 'utf-8', (err) => {
-      if (err) {
-        reject(err)
-        return
-      }
-      fs.rename(tmpPath, filePath, (renameErr) => {
-        if (renameErr) {
-          reject(renameErr)
-          return
-        }
-        resolve()
-      })
-    })
+function writeDb() {
+  if (writeBlocked || closed) return
+  if (writing) return // 当前写入结束后会根据 dirty 补写
+  writing = true
+  dirty = false
+  const tmpPath = dbPath + '.tmp'
+  const content = JSON.stringify(data, null, 2)
+
+  const done = (err?: unknown) => {
+    if (err) {
+      console.error('Failed to save database:', err)
+      dirty = true // 本次快照没落盘，留给下一次写入
+    }
+    writing = false
+    // 防抖计时器还在等待时交给它处理，否则立即补写
+    if (dirty && !saveTimer) writeDb()
+  }
+
+  fs.writeFile(tmpPath, content, 'utf-8', (err) => {
+    if (err) return done(err)
+    if (closed) {
+      // 退出时已同步写入了更新的数据，丢弃这份旧快照
+      fs.unlink(tmpPath, () => {})
+      return done()
+    }
+    fs.rename(tmpPath, dbPath, (renameErr) => done(renameErr || undefined))
   })
 }
 
 /**
- * 防抖异步保存数据库（合并短时间内的多次写入）
+ * 防抖保存数据库（合并短时间内的多次写入）
  */
 function scheduleSave() {
+  dirty = true
   if (saveTimer) {
     clearTimeout(saveTimer)
   }
   saveTimer = setTimeout(() => {
     saveTimer = null
-    atomicWriteAsync(dbPath, JSON.stringify(data, null, 2)).catch((err) => {
-      console.error('Failed to save database:', err)
-    })
+    writeDb()
   }, SAVE_DEBOUNCE_MS)
 }
 
 /**
- * 立即保存（用于关键操作如删除、收藏等需要立即持久化的场景）
+ * 立即保存（删除、收藏等关键操作）：跳过防抖立即开始写入；
+ * 若已有写入在进行，则在其结束后立刻补写。
  */
 function saveNow() {
+  dirty = true
   if (saveTimer) {
     clearTimeout(saveTimer)
     saveTimer = null
   }
-  try {
-    atomicWriteSync(dbPath, JSON.stringify(data, null, 2))
-  } catch (err) {
-    console.error('Failed to save database:', err)
+  writeDb()
+}
+
+/**
+ * 退出前同步落盘尚未写入的改动。使用独立的临时文件，不与可能仍在进行的后台写入冲突。
+ */
+export function flushDatabaseSync() {
+  if (closed || !dbPath) return
+  closed = true
+  if (saveTimer) {
+    clearTimeout(saveTimer)
+    saveTimer = null
   }
+  if (writeBlocked || (!dirty && !writing)) return
+  try {
+    atomicWriteSync(dbPath, JSON.stringify(data, null, 2), '.quit.tmp')
+  } catch (err) {
+    console.error('Failed to flush database on quit:', err)
+  }
+}
+
+/** 解析并校验数据文件，结构不对时抛错，按“损坏”处理 */
+function parseDatabase(raw: string): DatabaseData {
+  const parsed = JSON.parse(raw)
+  if (!parsed || !Array.isArray(parsed.clips)) {
+    throw new Error('Invalid database structure: clips is not an array')
+  }
+  if (typeof parsed.nextId !== 'number') {
+    parsed.nextId = parsed.clips.reduce((max: number, c: ClipRecord) => Math.max(max, c.id || 0), 0) + 1
+  }
+  return parsed
 }
 
 function saveSettingsFile() {
@@ -138,34 +187,48 @@ export function initDatabase() {
   }
 
   // 加载剪切板数据
-  try {
-    if (fs.existsSync(dbPath)) {
-      const raw = fs.readFileSync(dbPath, 'utf-8')
-      data = JSON.parse(raw)
-      // 为旧记录补充新字段默认值
-      for (const clip of data.clips) {
-        if (clip.copy_count === undefined) clip.copy_count = 0
-        if (clip.first_copied_at === undefined) clip.first_copied_at = null
-        if (clip.last_copied_at === undefined) clip.last_copied_at = null
-        if (clip.last_pasted_at === undefined) clip.last_pasted_at = clip.created_at
-      }
-      // 一次性数据修复：旧版本图片记录的 content_hash 是基于 preview 文本计算的，
-      // 导致同尺寸图片相互错误去重。这里基于实际图片文件重算一次正确的 hash。
-      migrateImageHashes()
-    }
-  } catch (err) {
-    console.error('Failed to load database, starting fresh:', err)
-    // 尝试从 .tmp 恢复
-    const tmpPath = dbPath + '.tmp'
+  let loaded = false
+  if (fs.existsSync(dbPath)) {
     try {
-      if (fs.existsSync(tmpPath)) {
-        const raw = fs.readFileSync(tmpPath, 'utf-8')
-        data = JSON.parse(raw)
-        console.log('Recovered database from .tmp file')
+      data = parseDatabase(fs.readFileSync(dbPath, 'utf-8'))
+      loaded = true
+    } catch (err) {
+      console.error('Failed to load database:', err)
+      // 读不了的原文件先改名保留，绝不能被之后的保存覆盖
+      const backupPath = `${dbPath}.corrupt-${Date.now()}`
+      try {
+        fs.renameSync(dbPath, backupPath)
+        console.error(`Unreadable database preserved at ${backupPath}`)
+      } catch (backupErr) {
+        // 原文件改不了名就不能往同一路径写，本次运行禁止写盘
+        writeBlocked = true
+        console.error('Failed to preserve unreadable database, saving disabled:', backupErr)
       }
-    } catch {
-      data = { clips: [], nextId: 1 }
+      // 尝试从 .tmp 恢复
+      const tmpPath = dbPath + '.tmp'
+      try {
+        if (fs.existsSync(tmpPath)) {
+          data = parseDatabase(fs.readFileSync(tmpPath, 'utf-8'))
+          loaded = true
+          console.log('Recovered database from .tmp file')
+        }
+      } catch {
+        data = { clips: [], nextId: 1 }
+      }
     }
+  }
+
+  if (loaded) {
+    // 为旧记录补充新字段默认值
+    for (const clip of data.clips) {
+      if (clip.copy_count === undefined) clip.copy_count = 0
+      if (clip.first_copied_at === undefined) clip.first_copied_at = null
+      if (clip.last_copied_at === undefined) clip.last_copied_at = null
+      if (clip.last_pasted_at === undefined) clip.last_pasted_at = clip.created_at
+    }
+    // 一次性数据修复：旧版本图片记录的 content_hash 是基于 preview 文本计算的，
+    // 导致同尺寸图片相互错误去重。这里基于实际图片文件重算一次正确的 hash。
+    migrateImageHashes()
   }
 
   // 加载设置
@@ -260,6 +323,7 @@ function migrateImageHashes() {
       `[Migration] image hashes: recomputed=${recomputed}, removedOrphans=${removedOrphans}, mergedDuplicates=${mergedDups}`
     )
     // 立即持久化迁移结果
+    if (writeBlocked) return
     try {
       atomicWriteSync(dbPath, JSON.stringify(data, null, 2))
     } catch (err) {

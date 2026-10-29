@@ -70,6 +70,9 @@ function checkClipboard() {
         insertClip(text, type)
         changed = true
       }
+    } else {
+      // 剪贴板里已没有文字：清空记忆，之后再复制同一段文字才能被识别为新的复制并置顶
+      lastTextHash = ''
     }
 
     // 图片：不再因为文本非空就跳过。
@@ -104,6 +107,10 @@ function checkClipboard() {
           }
         }
       }
+    } else {
+      // 剪贴板里已没有图片：清空记忆。否则「复制图 A → 复制文字 → 再复制图 A」时
+      // 第二次复制与记忆中的 hash 相同会被直接忽略，图 A 不会置顶，看起来像没记录
+      lastImageHash = ''
     }
 
     // 同一次变化只通知一次，避免图文混排时刷新两遍列表
