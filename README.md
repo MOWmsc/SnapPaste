@@ -4,7 +4,7 @@
 
 <p>
   <img src="https://img.shields.io/badge/platform-macOS-lightgrey.svg" alt="platform" />
-  <img src="https://img.shields.io/badge/version-1.0.7-blue.svg" alt="version" />
+  <img src="https://img.shields.io/badge/version-1.0.8-blue.svg" alt="version" />
   <img src="https://img.shields.io/badge/electron-33-9feaf9.svg" alt="electron" />
   <img src="https://img.shields.io/badge/react-18-61dafb.svg" alt="react" />
   <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="license" />
@@ -25,7 +25,7 @@
 - 🌓 **深色模式** — 自动跟随系统外观
 - 📌 **窗口钉住** — 防止失焦自动隐藏，方便连续操作
 - ⌨️ **键盘导航** — `↑↓` 选择 / `Enter` 复制 / `Esc` 关闭
-- 💾 **原子写入** — 防抖 + 临时文件 rename，避免数据丢失
+- 💾 **增量写入** — SQLite + WAL，单条变更只写单条，不再整份重写
 - 🧹 **自动清理** — 可配置保留天数与最大条数，收藏项不受影响
 
 ## 📸 截图
@@ -86,7 +86,7 @@ npm run build
 | 样式 | [Tailwind CSS 3](https://tailwindcss.com/) + CSS Variables |
 | 构建 | [Vite 6](https://vitejs.dev/) + [vite-plugin-electron](https://github.com/electron-vite/vite-plugin-electron) |
 | 打包 | [electron-builder 25](https://www.electron.build/) |
-| 持久化 | JSON + 原子写入（防抖） |
+| 持久化 | SQLite（better-sqlite3 + WAL + FTS5 trigram） |
 
 ## 📂 项目结构
 
@@ -95,7 +95,7 @@ SnapPaste/
 ├── electron/                   # 主进程代码
 │   ├── main.ts                 # 入口：窗口、快捷键、生命周期
 │   ├── preload.ts              # 预加载：暴露安全 API 给渲染进程
-│   ├── database.ts             # 持久化层：JSON 文件 + 原子写入
+│   ├── database.ts             # 持久化层：SQLite（WAL + FTS5 全文索引）
 │   ├── clipboard-monitor.ts    # 剪切板监听：自适应轮询（图片限频每秒一次）
 │   ├── ipc-handlers.ts         # IPC 调用处理
 │   └── tray.ts                 # 系统托盘 + 手绘 PNG 图标
@@ -138,16 +138,16 @@ Electron 的 `clipboard` 没有暴露 macOS 的 `changeCount`，无法做「计�
 
 ### 数据安全
 
-- **防抖写入**：1s 内多次变更合并为一次 IO
-- **原子写入**：`fs.writeFileSync(tmpPath) → fs.renameSync(tmpPath, dbPath)`，防止崩溃时半写状态
-- **崩溃恢复**：启动时若主文件损坏，自动尝试从 `.tmp` 恢复
-- **数据迁移版本位**：旧数据库结构变化时安全升级，启动时一次性执行
+- **SQLite + WAL**：每条记录增量写入，不再整份重写数据文件；崩溃后由 SQLite 自身保证一致性
+- **退出前 checkpoint**：把 WAL 合并回主库，最近一次操作不会随退出丢失
+- **损坏文件保留**：库文件打不开时先改名为 `.corrupt-<时间戳>`，不会用空数据覆盖
+- **JSON 迁移**：首次启动把旧的 `snappaste-clips.json` 一次性导入，成功后改名为 `.migrated-<时间戳>` 保留
 
 ## 🗂 数据存储位置
 
 ```
 ~/Library/Application Support/snappaste/
-├── snappaste-clips.json        # 剪切板记录
+├── snappaste.db                # 剪切板记录（SQLite，含全文索引）
 ├── snappaste-settings.json     # 用户设置
 └── clipboard-images/           # 图片缓存目录
 ```
@@ -155,6 +155,14 @@ Electron 的 `clipboard` 没有暴露 macOS 的 `changeCount`，无法做「计�
 可在「设置 → 数据存储」页查看并跳转到 Finder。
 
 ## 📅 更新日志
+
+### v1.0.8 (2026-10-29)
+- 🗄️ **持久化从 JSON 迁移到 SQLite**（better-sqlite3 + WAL）：新增/删除/收藏只写单条记录，不再整份重写几十 MB 的数据文件
+- ⚡️ 搜索改走 FTS5 全文索引（trigram，中文按子串匹配；少于 3 个字符回退 LIKE），实测 15k 条 / 19MB 内容下从 27–41ms 降到 0.2–20ms
+- ⚡️ 删除、收藏从约 59ms 降到亚毫秒，且不再阻塞主进程
+- 🛡️ 首次启动自动导入旧 JSON，成功后改名为 `snappaste-clips.json.migrated-<时间戳>` 保留，不删除
+- 🛡️ 数据库文件打不开时先改名为 `.corrupt-<时间戳>` 保留，不会用空数据覆盖
+- 🐛 条数与保留天数限制改动后立即生效（此前要等累计 10 次新增才触发清理）
 
 ### v1.0.7 (2026-10-29)
 - 🛡️ **修复数据可能被写坏/丢失**：后台防抖写盘与删除、收藏的写盘互相覆盖（已删除的记录会被写回、新复制的记录会丢），改为写盘串行化，进行中再有改动则写完后补写最新快照

@@ -1,6 +1,6 @@
 {
   "name": "snappaste",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "SnapPaste — 快捷剪切板管理工具",
   "main": "dist-electron/main.js",
   "scripts": {
@@ -9,12 +9,14 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "better-sqlite3": "^11.10.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-virtuoso": "^4.12.3",
     "zustand": "^5.0.3"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
     "@vitejs/plugin-react": "^4.3.4",

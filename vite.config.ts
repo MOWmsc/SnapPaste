@@ -12,7 +12,12 @@ export default defineConfig({
         entry: 'electron/main.ts',
         vite: {
           build: {
-            outDir: 'dist-electron'
+            outDir: 'dist-electron',
+            rollupOptions: {
+              // 原生模块不能打进 bundle：运行时从 node_modules 加载，
+              // 否则 bindings 解析不到 better_sqlite3.node
+              external: ['better-sqlite3']
+            }
           }
         }
       },

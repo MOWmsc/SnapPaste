@@ -156,7 +156,7 @@ export function registerIpcHandlers(mainWindow: BrowserWindow) {
     const userDataDir = app.getPath('userData')
     return {
       dataDir: userDataDir,
-      dbFile: path.join(userDataDir, 'snappaste-clips.json'),
+      dbFile: path.join(userDataDir, 'snappaste.db'),
       settingsFile: path.join(userDataDir, 'snappaste-settings.json'),
       imagesDir: path.join(userDataDir, 'clipboard-images')
     }

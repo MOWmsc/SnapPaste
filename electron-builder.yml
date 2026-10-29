@@ -6,6 +6,13 @@ directories:
 files:
   - dist
   - dist-electron
+  # better-sqlite3 是原生模块，主进程通过 require 加载，必须打进包里
+  - node_modules/better-sqlite3/**
+  - node_modules/bindings/**
+  - node_modules/file-uri-to-path/**
+# .node 二进制不能放进 asar，需解包到 app.asar.unpacked
+asarUnpack:
+  - node_modules/better-sqlite3/**
 mac:
   target:
     - dmg
