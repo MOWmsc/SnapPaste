@@ -4,7 +4,7 @@
 
 <p>
   <img src="https://img.shields.io/badge/platform-macOS-lightgrey.svg" alt="platform" />
-  <img src="https://img.shields.io/badge/version-1.0.9-blue.svg" alt="version" />
+  <img src="https://img.shields.io/badge/version-1.0.10-blue.svg" alt="version" />
   <img src="https://img.shields.io/badge/electron-33-9feaf9.svg" alt="electron" />
   <img src="https://img.shields.io/badge/react-18-61dafb.svg" alt="react" />
   <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="license" />
@@ -21,7 +21,7 @@
 - 📊 **复制统计** — 记录每条内容的复制次数、首次/末次复制时间
 - 🖼️ **图片大图预览** — hover 任意图片项即可放大查看
 - 🎯 **智能置顶** — 复制后该项自动移到列表第一位
-- ⚡️ **自适应轮询** — 活跃 300ms / 空闲 800ms 动态切换，图片检查限频每秒一次
+- ⚡️ **自适应轮询** — 活跃 300ms / 空闲 500ms 动态切换，图片按原始字节指纹判断是否换图
 - 🌓 **深色模式** — 自动跟随系统外观
 - 📌 **窗口钉住** — 防止失焦自动隐藏，方便连续操作
 - ⌨️ **键盘导航** — `↑↓` 选择 / `Enter` 复制 / `Esc` 关闭
@@ -116,10 +116,10 @@ SnapPaste/
 
 Electron 的 `clipboard` 没有暴露 macOS 的 `changeCount`，无法做「计数器变了才读内容」的零成本检测，因此采用分层轮询：
 
-- **空闲态** 800ms 轮询一次
+- **空闲态** 500ms 轮询一次
 - **活跃态**（最近 3s 内有变化）切换到 300ms 提高响应
 - **文本**每轮读取并比对 `sha256`，成本低
-- **图片**解码 + PNG 编码成本高，限频每秒最多检查一次
+- **图片**读剪贴板原始字节（长度 + 首尾 4KB 的 hash）判断是否换图，只在换图时解码并 PNG 编码一次
 - 文本与图片各记一份最近入库哈希；剪贴板不再包含某类型时清空对应哈希，保证「复制 A → 复制 B → 再复制 A」时 A 能重新置顶
 
 ### 智能内容去重
@@ -155,6 +155,12 @@ Electron 的 `clipboard` 没有暴露 macOS 的 `changeCount`，无法做「计�
 可在「设置 → 数据存储」页查看并跳转到 Finder。
 
 ## 📅 更新日志
+
+### v1.0.10 (2026-11-02)
+- 🐛 **修复连续复制图片时第二张丢失**：图片检测此前被限制为每秒一次，第二张图若在 1 秒内被别的内容覆盖，整个停留期都落在限频窗口里，一次都读不到（实测 4 次里丢 3 次）
+- ⚡️ 图片是否换图改用剪贴板**原始字节指纹**（长度 + 首尾 4KB 的 hash）判断，只做一次内存拷贝、不解码，因此可以每轮轮询都检查；解码与 PNG 编码只在换图时发生一次
+- ⚡️ 空闲轮询 800ms → 500ms，缩短「图片出现后被下一条内容覆盖」的漏检窗口
+- 少数只提供解码图的来源仍有 1 秒兜底限频，其余场景不再限频
 
 ### v1.0.9 (2026-10-29)
 - 🐛 **修复搜索快速切换时结果停在旧关键词**：旧实现用 `isLoading` 直接丢弃新请求，请求一慢，最后一次输入就发不出去；改为请求序号，只有最后一次请求写状态，旧结果自动作废
