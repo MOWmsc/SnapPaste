@@ -212,10 +212,9 @@ export const useClipboardStore = create<ClipboardStore>((set, get) => ({
           last_copied_at: now,
           last_pasted_at: now
         }
-        // 重新排序：收藏优先，其次按 last_pasted_at 倒序，确保 updated 移到所属分组顶部
+        // 重新排序：只按 last_pasted_at 倒序（收藏不再置顶，收藏项统一在上方「收藏」页查看）
         const others = state.clips.filter((c) => c.id !== id)
         const reordered = [updated, ...others].sort((a, b) => {
-          if (a.is_favorite !== b.is_favorite) return b.is_favorite - a.is_favorite
           const aTime = new Date(a.last_pasted_at || a.created_at).getTime()
           const bTime = new Date(b.last_pasted_at || b.created_at).getTime()
           return bTime - aTime

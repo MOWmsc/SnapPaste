@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS clips (
   first_copied_at TEXT,
   last_copied_at TEXT
 );
-CREATE INDEX IF NOT EXISTS idx_clips_order ON clips(is_favorite DESC, last_pasted_at DESC);
+CREATE INDEX IF NOT EXISTS idx_clips_pasted ON clips(last_pasted_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_clips_type ON clips(type);
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE VIRTUAL TABLE IF NOT EXISTS clips_fts USING fts5(
@@ -111,6 +111,7 @@ function openDatabase() {
     db.pragma('journal_mode = WAL')
     db.pragma('synchronous = NORMAL')
     db.exec(SCHEMA)
+    migrateSortIndex()
   } catch (err) {
     console.error('Failed to open database:', err)
     // 打不开时先改名保留原文件，避免后续写入把它彻底覆盖
@@ -133,6 +134,17 @@ function openDatabase() {
     db.pragma('journal_mode = WAL')
     db.exec(SCHEMA)
   }
+}
+
+/**
+ * 1.0.11：列表排序从「收藏优先 + 时间」改为「纯时间」，
+ * 旧的 (is_favorite, last_pasted_at) 索引不再适用。只在升级时重建一次。
+ */
+function migrateSortIndex() {
+  if (Number(getMeta('schema_version') || '1') >= 2) return
+  db!.exec('DROP INDEX IF EXISTS idx_clips_order')
+  setMeta('schema_version', '2')
+  console.log('[Migration] rebuilt sort index: favorites are no longer pinned')
 }
 
 /**
@@ -292,7 +304,7 @@ export function getClips(params: {
   const rows = db!
     .prepare(
       `SELECT * FROM clips ${where.sql}
-       ORDER BY is_favorite DESC, last_pasted_at DESC
+       ORDER BY last_pasted_at DESC, id DESC
        LIMIT ? OFFSET ?`
     )
     .all(...where.args, limit, offset)

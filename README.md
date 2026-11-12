@@ -4,7 +4,7 @@
 
 <p>
   <img src="https://img.shields.io/badge/platform-macOS-lightgrey.svg" alt="platform" />
-  <img src="https://img.shields.io/badge/version-1.0.10-blue.svg" alt="version" />
+  <img src="https://img.shields.io/badge/version-1.0.11-blue.svg" alt="version" />
   <img src="https://img.shields.io/badge/electron-33-9feaf9.svg" alt="electron" />
   <img src="https://img.shields.io/badge/react-18-61dafb.svg" alt="react" />
   <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="license" />
@@ -17,7 +17,7 @@
 - 🚀 **全局快捷键** — 默认 `⌘ + Shift + V` 唤起，再按一次或 `Esc` 隐藏
 - 📋 **多类型支持** — 文本 / 图片 / 文件路径 自动识别归类
 - 🔍 **实时搜索** — 输入即过滤，支持关键词高亮
-- ⭐ **收藏置顶** — 重要内容一键收藏，永不被清理
+- ⭐ **收藏集中查看** — 重要内容一键收藏，通过顶部「收藏」页单独查看，不占用主列表；收藏项永不被清理
 - 📊 **复制统计** — 记录每条内容的复制次数、首次/末次复制时间
 - 🖼️ **图片大图预览** — hover 任意图片项即可放大查看
 - 🎯 **智能置顶** — 复制后该项自动移到列表第一位
@@ -133,7 +133,7 @@ Electron 的 `clipboard` 没有暴露 macOS 的 `changeCount`，无法做「计�
 复制任意一项后：
 
 1. 后端立即更新 `copy_count`、`last_copied_at`、`last_pasted_at`
-2. 前端 store 同步本地状态并按规则（收藏优先 → 时间倒序）重排，UI 立即把该项移到第一位
+2. 前端 store 同步本地状态并按 `last_pasted_at` 倒序重排，UI 立即把该项移到第一位
 3. 写入剪切板时同步更新 `lastHash`，防止剪切板监听器把"我刚写的"误判为"新内容"
 
 ### 数据安全
@@ -155,6 +155,11 @@ Electron 的 `clipboard` 没有暴露 macOS 的 `changeCount`，无法做「计�
 可在「设置 → 数据存储」页查看并跳转到 Finder。
 
 ## 📅 更新日志
+
+### v1.0.11 (2026-11-12)
+- 🎨 **收藏不再固定占用列表顶部**：主列表一律按时间倒序，收藏项留在原位置不动；要看收藏统一走顶部「收藏」页
+- 收藏多了不会再把新复制的记录挤到下面
+- 排序索引随之改为纯时间索引，升级时自动重建一次
 
 ### v1.0.10 (2026-11-02)
 - 🐛 **修复连续复制图片时第二张丢失**：图片检测此前被限制为每秒一次，第二张图若在 1 秒内被别的内容覆盖，整个停留期都落在限频窗口里，一次都读不到（实测 4 次里丢 3 次）
